@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.js.map
+*.d.ts.map
+
+# Test coverage
+coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Generated data (keep structure, ignore content)
+data-scraper/data/raw/*.json
+data-scraper/data/*.db
+data-scraper/data/*.db-journal
+
+# Temporary files
+*.tmp
+*.temp
