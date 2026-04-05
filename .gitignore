@@ -7,6 +7,10 @@ build/
 *.js.map
 *.d.ts.map
 
+# Compiled test files (ts-jest outputs)
+__tests__/*.js
+__tests__/*.d.ts
+
 # Test coverage
 coverage/
 
