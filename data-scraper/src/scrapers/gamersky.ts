@@ -12,6 +12,7 @@ const CHAPTER_KEYWORDS: Record<string, string> = {
   '纳': '序章',
   '孵化仓': '序章',
   '米纳斯': '序章',
+  '废墟': '序章',
   // 第一章
   '海滩': '第一章',
   '礼拜堂': '第一章',
@@ -34,6 +35,23 @@ const CHAPTER_KEYWORDS: Record<string, string> = {
   '日照湿地': '第一章',
   '夺心魔巢穴': '第一章',
   '河边茶室': '第一章',
+  '盖尔': '第一章',
+  '阿斯代伦': '第一章',
+  '影心': '第一章',
+  '莱埃泽尔': '第一章',
+  '威尔': '第一章',
+  '卡拉克': '第一章',
+  '鱼人': '第一章',
+  '停尸间': '第一章',
+  '奥法之塔': '第一章',
+  '地窖': '第一章',
+  '蘑菇猎人': '第一章',
+  '轻语树皮': '第一章',
+  '精金熔炉': '第一章',
+  '铁手侏儒': '第一章',
+  '库拉': '第一章',
+  '信件': '第一章',
+  '靴子': '第一章',
   // 第二章
   '月出之塔': '第二章',
   '月出': '第二章',
@@ -55,6 +73,22 @@ const CHAPTER_KEYWORDS: Record<string, string> = {
   '卡扎多尔': '第二章',
   '希望之邸': '第二章',
   '巴尔神殿': '第二章',
+  '哈尔辛': '第二章',
+  '明萨拉': '第二章',
+  '伊索贝尔': '第二章',
+  '阴影': '第二章',
+  '诅咒': '第二章',
+  '鬼婆': '第二章',
+  '僧侣': '第二章',
+  '死灵': '第二章',
+  '木乃伊': '第二章',
+  '洛山达': '第二章',
+  '竖琴手': '第二章',
+  '卡菈克': '第二章',
+  '拉斐尔': '第二章',
+  '梅琳娜': '第二章',
+  '难民': '第二章',
+  '米佐拉': '第二章',
   // 第三章
   '博德之门': '第三章',
   '下城区': '第三章',
@@ -64,6 +98,20 @@ const CHAPTER_KEYWORDS: Record<string, string> = {
   '钢铁': '第三章',
   '利文顿': '第三章',
   '最终决战': '第三章',
+  '龙王戟': '第三章',
+  '精灵歌酒馆': '第三章',
+  '城市广场': '第三章',
+  '费尔罗': '第三章',
+  '风车': '第三章',
+  '玩具': '第三章',
+  '刊发': '第三章',
+  '谋杀案': '第三章',
+  '地下势力': '第三章',
+  '征收所': '第三章',
+  '金人': '第三章',
+  '巴尔集会': '第三章',
+  '小丑': '第三章',
+  '图书馆员': '第三章',
 };
 
 export class GamerskyScraper extends BaseScraper {
@@ -169,23 +217,38 @@ export class GamerskyScraper extends BaseScraper {
     const quests: ScrapedQuest[] = [];
 
     for (const { $, pageNum } of pages) {
-      // 从页面标题提取地点信息
-      // 标题格式: 《博德之门3》正式版全流程图文攻略 正式版全地图探索流程攻略_螺壳舰-游民星空
+      // 从页面标题提取任务信息
+      // 标题格式示例:
+      // 《博德之门3》全支线及伙伴任务攻略_支线-探索废墟-游民星空
+      // 《博德之门3》正式版全流程图文攻略_螺壳舰-游民星空
       const pageTitle = $('title').text();
       const titleParts = pageTitle.split('_');
 
-      // 提取地点名称（下划线后面的部分）
-      let locationName = '';
+      let questName = '';
+      let questType = defaultType;
+
       if (titleParts.length > 1) {
-        const afterUnderscore = titleParts[1].split('-')[0].trim();
-        locationName = afterUnderscore;
+        // 获取下划线后面的部分，去掉网站名
+        const afterUnderscore = titleParts[1].replace(/-游民星空.*$/, '').trim();
+
+        // 检查是否是支线/事件/伙伴任务格式
+        const typeMatch = afterUnderscore.match(/^(支线|事件|伙伴任务)[-：:]\s*(.+)$/);
+        if (typeMatch) {
+          // 提取具体任务名
+          questName = typeMatch[2].trim();
+        } else {
+          // 直接使用名称（如：螺壳舰、翠绿林地等）
+          questName = afterUnderscore;
+        }
       }
 
-      // 从地点名称推断章节
-      const chapter = this.detectChapter(locationName || pageTitle);
+      // 如果没有提取到名称，使用默认值
+      if (!questName) {
+        questName = `${guideName} - 第${pageNum}页`;
+      }
 
-      // 使用地点名称作为任务名
-      const questName = locationName || `${guideName} - 第${pageNum}页`;
+      // 从任务名称推断章节
+      const chapter = this.detectChapter(questName || pageTitle);
 
       // 解析步骤和图片
       const steps = this.parseStepsWithImages($);
@@ -193,7 +256,7 @@ export class GamerskyScraper extends BaseScraper {
       if (steps.length > 0) {
         quests.push({
           name: questName,
-          type: defaultType,
+          type: questType,
           description: `第 ${pageNum} 页`,
           chapter_name: chapter,
           steps
