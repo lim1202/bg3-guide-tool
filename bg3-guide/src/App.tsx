@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import "./App.css";
@@ -23,7 +23,9 @@ function App() {
   // Window control states
   const [isCompact, setIsCompact] = useState(false);
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(true);
-  const [showQuickQuestList, setShowQuickQuestList] = useState(false);
+
+  // Ref for quest list scrolling
+  const questListRef = useRef<HTMLDivElement>(null);
 
   // Helper to convert image URL to loadable URL
   const getImageUrl = (imagePath: string | null): string | null => {
@@ -75,7 +77,6 @@ function App() {
         // Restore normal mode
         await appWindow.setSize(new LogicalSize(NORMAL_WIDTH, NORMAL_HEIGHT));
         setIsCompact(false);
-        setShowQuickQuestList(false);
       } else {
         // Enter compact mode
         await appWindow.setSize(new LogicalSize(COMPACT_WIDTH, COMPACT_HEIGHT));
@@ -105,6 +106,21 @@ function App() {
   });
 
   const chapters = [...new Set(quests.map(q => q.chapter_name))];
+
+  // Scroll to selected quest in the list
+  const scrollToSelectedQuest = useCallback(() => {
+    if (selectedQuest && questListRef.current) {
+      const questElement = document.getElementById(`quest-${selectedQuest.id}`);
+      if (questElement) {
+        questElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [selectedQuest]);
+
+  // Scroll when selected quest changes
+  useEffect(() => {
+    scrollToSelectedQuest();
+  }, [selectedQuest, scrollToSelectedQuest]);
 
   // Loading state
   if (loading) {
@@ -144,12 +160,9 @@ function App() {
             </span>
           )}
           {/* Quest Name */}
-          <div
-            className="flex-1 flex items-center cursor-pointer hover:text-amber-400 transition-colors"
-            onClick={() => setShowQuickQuestList(!showQuickQuestList)}
-          >
+          <div className="flex-1 flex items-center">
             <span className="text-lg font-medium truncate">
-              {selectedQuest ? selectedQuest.name : "点击选择任务"}
+              {selectedQuest ? selectedQuest.name : "未选择任务"}
             </span>
             {selectedQuest && (
               <span className="text-sm text-gray-400 ml-2 truncate">
@@ -171,15 +184,6 @@ function App() {
               </svg>
             </button>
             <button
-              onClick={() => setShowQuickQuestList(!showQuickQuestList)}
-              className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
-              title="任务列表"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-            <button
               onClick={toggleCompact}
               className="p-1.5 bg-amber-600 hover:bg-amber-500 rounded transition-colors"
               title="展开窗口"
@@ -189,47 +193,6 @@ function App() {
               </svg>
             </button>
           </div>
-          {/* Quick Quest List Dropdown */}
-          {showQuickQuestList && (
-            <div className="absolute top-full left-0 right-0 bg-gray-800 border border-gray-700 shadow-lg max-h-60 overflow-y-auto z-50">
-              {chapters.map((chapter) => (
-                <div key={chapter}>
-                  <div className="px-3 py-1.5 bg-gray-750 text-xs font-semibold text-gray-400 border-b border-gray-700">
-                    {chapter}
-                  </div>
-                  {filteredQuests
-                    .filter((q) => q.chapter_name === chapter)
-                    .map((quest) => (
-                      <div
-                        key={quest.id}
-                        className={`px-3 py-2 cursor-pointer hover:bg-gray-700 border-b border-gray-700 ${
-                          selectedQuest?.id === quest.id ? "bg-amber-900/30" : ""
-                        }`}
-                        onClick={() => {
-                          setSelectedQuest(quest);
-                          setShowQuickQuestList(false);
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-xs px-1.5 py-0.5 rounded ${
-                              quest.q_type === "main"
-                                ? "bg-red-900 text-red-200"
-                                : quest.q_type === "side"
-                                ? "bg-blue-900 text-blue-200"
-                                : "bg-green-900 text-green-200"
-                            }`}
-                          >
-                            {getQuestTypeDisplay(quest.q_type)}
-                          </span>
-                          <span className="text-sm font-medium truncate">{quest.name}</span>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
@@ -266,13 +229,12 @@ function App() {
               </button>
               <button
                 onClick={() => setShowOcrPanel(true)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-medium transition-colors"
+                className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
                 title="截图识别任务"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                截图识别
               </button>
             </div>
           </div>
@@ -307,7 +269,7 @@ function App() {
         </div>
 
         {/* Quest List */}
-        <div className="flex-1 overflow-y-auto">
+        <div ref={questListRef} className="flex-1 overflow-y-auto">
           {chapters.map((chapter) => (
             <div key={chapter}>
               <div className="px-4 py-2 bg-gray-750 text-sm font-semibold text-gray-400 border-b border-gray-700">
@@ -318,6 +280,7 @@ function App() {
                 .map((quest) => (
                   <div
                     key={quest.id}
+                    id={`quest-${quest.id}`}
                     className={`px-4 py-3 cursor-pointer border-b border-gray-700 hover:bg-gray-700 ${
                       selectedQuest?.id === quest.id ? "bg-gray-700 border-l-2 border-l-amber-500" : ""
                     }`}
@@ -376,7 +339,13 @@ function App() {
                 </span>
                 <span className="text-sm text-gray-400">{selectedQuest.chapter_name}</span>
               </div>
-              <h2 className="text-2xl font-bold text-amber-400">{selectedQuest.name}</h2>
+              <h2
+                className="text-2xl font-bold text-amber-400 cursor-pointer hover:text-amber-300 transition-colors"
+                onClick={scrollToSelectedQuest}
+                title="点击定位到任务列表"
+              >
+                {selectedQuest.name}
+              </h2>
               {selectedQuest.description && (
                 <p className="text-gray-400 mt-2">{selectedQuest.description}</p>
               )}

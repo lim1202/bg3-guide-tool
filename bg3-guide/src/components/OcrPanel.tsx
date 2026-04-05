@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { QuestWithSteps } from '../types';
 import { recognizeText, matchQuest, QuestMatch } from '../utils/ocr';
@@ -7,6 +7,13 @@ interface OcrPanelProps {
   quests: QuestWithSteps[];
   onSelectQuest: (quest: QuestWithSteps) => void;
   onClose: () => void;
+}
+
+interface SelectionRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelProps) {
@@ -19,6 +26,13 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
   const [error, setError] = useState<string | null>(null);
   const [selectedMatch, setSelectedMatch] = useState<QuestMatch | null>(null);
   const dropRef = useRef<HTMLDivElement>(null);
+
+  // Region selection state
+  const [isSelectingRegion, setIsSelectingRegion] = useState(false);
+  const [screenImage, setScreenImage] = useState<string | null>(null);
+  const [selection, setSelection] = useState<SelectionRect | null>(null);
+  const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
+  const selectionRef = useRef<HTMLDivElement>(null);
 
   // Handle image paste from clipboard
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
@@ -34,16 +48,17 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
           setError(null);
           setOcrText('');
           setMatches([]);
+          setSelectedMatch(null);
         }
       }
     }
   }, []);
 
   // Setup paste listener
-  useState(() => {
+  useEffect(() => {
     document.addEventListener('paste', handlePaste);
     return () => document.removeEventListener('paste', handlePaste);
-  });
+  }, [handlePaste]);
 
   // Handle drag and drop
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -56,6 +71,7 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
       setError(null);
       setOcrText('');
       setMatches([]);
+      setSelectedMatch(null);
     }
   }, []);
 
@@ -73,25 +89,139 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
       setError(null);
       setOcrText('');
       setMatches([]);
+      setSelectedMatch(null);
     }
   };
 
-  // Capture screen using Tauri command
+  // Capture screen and enter region selection mode
   const handleCaptureScreen = async () => {
     setIsProcessing(true);
     setError(null);
     try {
       const result = await invoke<{ image_base64: string; width: number; height: number }>('capture_screen');
+
+      if (!result.image_base64 || result.image_base64.length === 0) {
+        throw new Error('截图返回空数据');
+      }
+
       const base64Data = `data:image/png;base64,${result.image_base64}`;
-      setImage(base64Data);
-      setImagePreview(base64Data);
-      setOcrText('');
-      setMatches([]);
+      console.log('Screenshot captured:', result.width, 'x', result.height, 'base64 length:', result.image_base64.length);
+
+      setScreenImage(base64Data);
+      setIsSelectingRegion(true);
+      setSelection(null);
+      setSelectionStart(null);
     } catch (e) {
       setError(`截图失败: ${String(e)}`);
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Region selection handlers
+  const handleSelectionMouseDown = (e: React.MouseEvent) => {
+    if (!selectionRef.current) return;
+    const rect = selectionRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setSelectionStart({ x, y });
+    setSelection({ x, y, width: 0, height: 0 });
+  };
+
+  const handleSelectionMouseMove = (e: React.MouseEvent) => {
+    if (!selectionStart || !selectionRef.current) return;
+    const rect = selectionRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const width = Math.abs(x - selectionStart.x);
+    const height = Math.abs(y - selectionStart.y);
+    const startX = Math.min(x, selectionStart.x);
+    const startY = Math.min(y, selectionStart.y);
+
+    setSelection({ x: startX, y: startY, width, height });
+  };
+
+  const handleSelectionMouseUp = () => {
+    setSelectionStart(null);
+  };
+
+  // Crop selected region from screen image
+  const cropSelectedRegion = async () => {
+    if (!screenImage || !selection || selection.width < 10 || selection.height < 10) {
+      setError('选择的区域太小');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      // Create canvas to crop the image
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('图片加载失败'));
+        img.src = screenImage;
+      });
+
+      // Calculate scale (screen image might be scaled for display)
+      const displayWidth = selectionRef.current?.clientWidth || 0;
+      const displayHeight = selectionRef.current?.clientHeight || 0;
+
+      if (displayWidth === 0 || displayHeight === 0) {
+        throw new Error('无法获取显示尺寸');
+      }
+
+      const scaleX = img.naturalWidth / displayWidth;
+      const scaleY = img.naturalHeight / displayHeight;
+
+      const realX = Math.round(selection.x * scaleX);
+      const realY = Math.round(selection.y * scaleY);
+      const realWidth = Math.round(selection.width * scaleX);
+      const realHeight = Math.round(selection.height * scaleY);
+
+      if (realWidth <= 0 || realHeight <= 0) {
+        throw new Error('裁剪区域无效');
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = realWidth;
+      canvas.height = realHeight;
+      const ctx = canvas.getContext('2d');
+
+      if (!ctx) {
+        throw new Error('无法创建画布');
+      }
+
+      ctx.drawImage(img, realX, realY, realWidth, realHeight, 0, 0, realWidth, realHeight);
+      const croppedData = canvas.toDataURL('image/png');
+
+      if (!croppedData || croppedData === 'data:,') {
+        throw new Error('裁剪失败：无法生成图片');
+      }
+
+      setImage(croppedData);
+      setImagePreview(croppedData);
+      setIsSelectingRegion(false);
+      setScreenImage(null);
+      setSelection(null);
+      setOcrText('');
+      setMatches([]);
+      setSelectedMatch(null);
+    } catch (e) {
+      setError(`裁剪失败: ${String(e)}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Cancel region selection
+  const cancelRegionSelection = () => {
+    setIsSelectingRegion(false);
+    setScreenImage(null);
+    setSelection(null);
+    setSelectionStart(null);
   };
 
   // Capture BG3 window
@@ -103,11 +233,19 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
         'capture_window',
         { windowName: "Baldur's Gate" }
       );
+
+      if (!result.image_base64 || result.image_base64.length === 0) {
+        throw new Error('截图返回空数据');
+      }
+
       const base64Data = `data:image/png;base64,${result.image_base64}`;
+      console.log('Game window captured:', result.width, 'x', result.height);
+
       setImage(base64Data);
       setImagePreview(base64Data);
       setOcrText('');
       setMatches([]);
+      setSelectedMatch(null);
     } catch (e) {
       setError(`游戏窗口未找到或截图失败: ${String(e)}`);
     } finally {
@@ -150,6 +288,71 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
     }
   };
 
+  // Region selection overlay
+  if (isSelectingRegion && screenImage) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black/90 flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 bg-gray-800">
+          <h2 className="text-lg font-bold text-amber-400">选择截图区域</h2>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-400">
+              {selection ? `选区: ${Math.round(selection.width)}×${Math.round(selection.height)}` : '拖动选择区域'}
+            </span>
+            <button
+              onClick={cancelRegionSelection}
+              className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm"
+            >
+              取消
+            </button>
+            <button
+              onClick={cropSelectedRegion}
+              disabled={!selection || selection.width < 10 || selection.height < 10}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm disabled:opacity-50"
+            >
+              确认选区
+            </button>
+          </div>
+        </div>
+
+        {/* Selection area */}
+        <div
+          ref={selectionRef}
+          className="flex-1 relative cursor-crosshair"
+          onMouseDown={handleSelectionMouseDown}
+          onMouseMove={handleSelectionMouseMove}
+          onMouseUp={handleSelectionMouseUp}
+          onMouseLeave={handleSelectionMouseUp}
+        >
+          <img
+            src={screenImage}
+            alt="Screen capture"
+            className="w-full h-full object-contain"
+            draggable={false}
+            onError={(e) => {
+              console.error('Screen image load error:', e);
+              setError('截图加载失败');
+              cancelRegionSelection();
+            }}
+          />
+
+          {/* Selection rectangle */}
+          {selection && (
+            <div
+              className="absolute border-2 border-amber-400 bg-amber-400/20"
+              style={{
+                left: selection.x,
+                top: selection.y,
+                width: selection.width,
+                height: selection.height,
+              }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl mx-4 overflow-hidden">
@@ -180,6 +383,10 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
                 src={imagePreview}
                 alt="Screenshot preview"
                 className="max-h-48 mx-auto rounded"
+                onError={(e) => {
+                  console.error('Image load error:', e);
+                  setError('图片加载失败，请重试');
+                }}
               />
             ) : (
               <div className="py-8">
@@ -208,9 +415,9 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
               className="flex-1 py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             >
               <svg className="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
               </svg>
-              截取屏幕
+              选择区域截图
             </button>
             <button
               onClick={handleCaptureGame}
@@ -273,7 +480,7 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
           {/* Match results */}
           {matches.length > 0 && (
             <div className="mt-4">
-              <h3 className="text-sm font-semibold text-gray-400 mb-2">匹配任务:</h3>
+              <h3 className="text-sm font-semibold text-gray-400 mb-2">匹配任务 (前5个):</h3>
               <div className="space-y-2">
                 {matches.map((match, index) => (
                   <div
@@ -288,12 +495,12 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
                     <div className="flex-shrink-0 text-sm font-medium text-gray-400">
                       #{index + 1}
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-gray-200">{match.quest.name}</span>
-                        <span className="text-xs text-gray-500">{match.quest.chapter_name}</span>
+                        <span className="font-medium text-gray-200 truncate">{match.quest.name}</span>
+                        <span className="text-xs text-gray-500 truncate">{match.quest.chapter_name}</span>
                       </div>
-                      <div className="text-xs text-gray-400 mt-1">
+                      <div className="text-xs text-gray-400 mt-1 truncate">
                         匹配: "{match.matchedText}"
                       </div>
                     </div>
