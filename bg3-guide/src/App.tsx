@@ -4,12 +4,13 @@ import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import "./App.css";
 import { QuestWithSteps, QuestType, parseRewards, getQuestTypeDisplay } from "./types";
 import OcrPanel from "./components/OcrPanel";
+import TitleBar from "./components/TitleBar";
 
 // Window size constants
 const NORMAL_WIDTH = 1200;
 const NORMAL_HEIGHT = 800;
 const COMPACT_WIDTH = 500;
-const COMPACT_HEIGHT = 56;
+const COMPACT_HEIGHT = 40; // Just the mini bar (without title bar in compact mode)
 
 function App() {
   const [quests, setQuests] = useState<QuestWithSteps[]>([]);
@@ -141,31 +142,36 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-900 text-gray-100">
-      {/* Compact Mode - Mini Floating Bar */}
-      {isCompact && (
-        <div className="w-full h-full flex items-center bg-gray-800 border-b border-gray-700 px-3">
-          {/* Quest Type Icon */}
-          {selectedQuest && (
-            <span
-              className={`text-xs px-2 py-0.5 rounded mr-2 ${
-                selectedQuest.q_type === "main"
-                  ? "bg-red-900 text-red-200"
-                  : selectedQuest.q_type === "side"
-                  ? "bg-blue-900 text-blue-200"
-                  : "bg-green-900 text-green-200"
-              }`}
-            >
-              {getQuestTypeDisplay(selectedQuest.q_type)}
-            </span>
-          )}
-          {/* Quest Name */}
-          <div className="flex-1 flex items-center">
-            <span className="text-lg font-medium truncate">
-              {selectedQuest ? selectedQuest.name : "未选择任务"}
-            </span>
+    <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
+      {/* Title Bar - Hidden in compact mode */}
+      {!isCompact && <TitleBar />}
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Compact Mode - Mini Floating Bar */}
+        {isCompact && (
+          <div data-tauri-drag-region className="w-full h-full flex items-center bg-gray-800 px-3">
+            {/* Quest Type Icon */}
             {selectedQuest && (
-              <span className="text-sm text-gray-400 ml-2 truncate">
+              <span
+                className={`text-xs px-2 py-0.5 rounded mr-2 ${
+                  selectedQuest.q_type === "main"
+                    ? "bg-red-900 text-red-200"
+                    : selectedQuest.q_type === "side"
+                    ? "bg-blue-900 text-blue-200"
+                    : "bg-green-900 text-green-200"
+                }`}
+              >
+                {getQuestTypeDisplay(selectedQuest.q_type)}
+              </span>
+            )}
+            {/* Quest Name */}
+            <div data-tauri-drag-region className="flex-1 flex items-center">
+              <span className="text-base font-medium truncate">
+                {selectedQuest ? selectedQuest.name : "未选择任务"}
+              </span>
+              {selectedQuest && (
+                <span className="text-sm text-gray-400 ml-2 truncate">
                 · {selectedQuest.chapter_name}
               </span>
             )}
@@ -431,6 +437,7 @@ function App() {
           onClose={() => setShowOcrPanel(false)}
         />
       )}
+      </div>
     </div>
   );
 }

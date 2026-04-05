@@ -1,4 +1,4 @@
-import Tesseract from 'tesseract.js';
+import { createWorker } from 'tesseract.js';
 import { QuestWithSteps } from '../types';
 
 // OCR result with progress tracking
@@ -23,18 +23,26 @@ export async function recognizeText(
   image: Blob | string,
   onProgress?: (progress: number) => void
 ): Promise<OcrResult> {
-  const result = await Tesseract.recognize(image, 'chi_sim+eng', {
-    logger: (m) => {
-      if (m.status === 'recognizing text' && onProgress) {
-        onProgress(Math.round(m.progress * 100));
+  try {
+    // Create worker with proper configuration for production
+    const worker = await createWorker('chi_sim+eng', 1, {
+      logger: (m) => {
+        if (m.status === 'recognizing text' && onProgress) {
+          onProgress(Math.round(m.progress * 100));
+        }
       }
-    },
-  });
+    });
 
-  return {
-    text: result.data.text.trim(),
-    confidence: result.data.confidence,
-  };
+    const result = await worker.recognize(image);
+    await worker.terminate();
+
+    return {
+      text: result.data.text.trim(),
+      confidence: result.data.confidence,
+    };
+  } catch (error) {
+    throw new Error(`OCR识别失败: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 /**

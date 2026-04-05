@@ -105,8 +105,6 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
       }
 
       const base64Data = `data:image/png;base64,${result.image_base64}`;
-      console.log('Screenshot captured:', result.width, 'x', result.height, 'base64 length:', result.image_base64.length);
-
       setScreenImage(base64Data);
       setIsSelectingRegion(true);
       setSelection(null);
@@ -165,24 +163,55 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
         img.src = screenImage;
       });
 
-      // Calculate scale (screen image might be scaled for display)
-      const displayWidth = selectionRef.current?.clientWidth || 0;
-      const displayHeight = selectionRef.current?.clientHeight || 0;
-
-      if (displayWidth === 0 || displayHeight === 0) {
-        throw new Error('无法获取显示尺寸');
+      // Get container dimensions
+      if (!selectionRef.current) {
+        throw new Error('无法获取容器元素');
       }
 
-      const scaleX = img.naturalWidth / displayWidth;
-      const scaleY = img.naturalHeight / displayHeight;
+      const container = selectionRef.current;
+      const containerWidth = container.clientWidth;
+      const containerHeight = container.clientHeight;
 
-      const realX = Math.round(selection.x * scaleX);
-      const realY = Math.round(selection.y * scaleY);
-      const realWidth = Math.round(selection.width * scaleX);
-      const realHeight = Math.round(selection.height * scaleY);
+      // Calculate how the image is displayed with object-contain
+      // object-contain: scale to fit while preserving aspect ratio, centered
+      const imgAspect = img.naturalWidth / img.naturalHeight;
+      const containerAspect = containerWidth / containerHeight;
+
+      let displayWidth: number, displayHeight: number, offsetX: number, offsetY: number;
+
+      if (imgAspect > containerAspect) {
+        // Image is wider than container - constrained by width
+        displayWidth = containerWidth;
+        displayHeight = containerWidth / imgAspect;
+        offsetX = 0;
+        offsetY = (containerHeight - displayHeight) / 2;
+      } else {
+        // Image is taller than container - constrained by height
+        displayHeight = containerHeight;
+        displayWidth = containerHeight * imgAspect;
+        offsetX = (containerWidth - displayWidth) / 2;
+        offsetY = 0;
+      }
+
+      // Scale factor from displayed size to actual image size
+      const scale = img.naturalWidth / displayWidth;
+
+      // Convert selection coordinates to actual image coordinates
+      // Selection is relative to container, we need it relative to image
+      const realX = Math.max(0, Math.round((selection.x - offsetX) * scale));
+      const realY = Math.max(0, Math.round((selection.y - offsetY) * scale));
+      const realWidth = Math.round(selection.width * scale);
+      const realHeight = Math.round(selection.height * scale);
 
       if (realWidth <= 0 || realHeight <= 0) {
-        throw new Error('裁剪区域无效');
+        throw new Error('裁剪区域无效，请重新选择');
+      }
+
+      if (realX + realWidth > img.naturalWidth) {
+        throw new Error('裁剪区域超出图片右边界');
+      }
+      if (realY + realHeight > img.naturalHeight) {
+        throw new Error('裁剪区域超出图片下边界');
       }
 
       const canvas = document.createElement('canvas');
@@ -239,13 +268,12 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
       }
 
       const base64Data = `data:image/png;base64,${result.image_base64}`;
-      console.log('Game window captured:', result.width, 'x', result.height);
 
-      setImage(base64Data);
-      setImagePreview(base64Data);
-      setOcrText('');
-      setMatches([]);
-      setSelectedMatch(null);
+      // Enter region selection mode
+      setScreenImage(base64Data);
+      setIsSelectingRegion(true);
+      setSelection(null);
+      setSelectionStart(null);
     } catch (e) {
       setError(`游戏窗口未找到或截图失败: ${String(e)}`);
     } finally {
@@ -329,8 +357,7 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
             alt="Screen capture"
             className="w-full h-full object-contain"
             draggable={false}
-            onError={(e) => {
-              console.error('Screen image load error:', e);
+            onError={() => {
               setError('截图加载失败');
               cancelRegionSelection();
             }}
@@ -383,10 +410,9 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
                 src={imagePreview}
                 alt="Screenshot preview"
                 className="max-h-48 mx-auto rounded"
-                onError={(e) => {
-                  console.error('Image load error:', e);
-                  setError('图片加载失败，请重试');
-                }}
+                onError={() => {
+              setError('图片加载失败，请重试');
+            }}
               />
             ) : (
               <div className="py-8">
@@ -428,7 +454,7 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              截取游戏窗口
+              游戏窗口截图
             </button>
             <button
               onClick={handleRecognize}
