@@ -3,6 +3,7 @@ import { getAllScrapers } from './scrapers/index';
 import { DataCleaner } from './cleaner';
 import { DataValidator } from './validator';
 import { SQLiteExporter } from './exporter';
+import { TaskSplitter } from './task-splitter';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -15,6 +16,7 @@ async function scrape() {
   const scrapers = getAllScrapers();
   const cleaner = new DataCleaner();
   const validator = new DataValidator();
+  const splitter = new TaskSplitter();
 
   if (!fs.existsSync(RAW_DIR)) {
     fs.mkdirSync(RAW_DIR, { recursive: true });
@@ -26,7 +28,7 @@ async function scrape() {
     console.log(`Scraping from ${scraper.name}...`);
     try {
       const result = await scraper.scrape();
-      console.log(`  Found ${result.quests.length} quests`);
+      console.log(`  Found ${result.quests.length} raw quests`);
 
       if (result.errors && result.errors.length > 0) {
         console.log(`  Errors: ${result.errors.join(', ')}`);
@@ -35,8 +37,18 @@ async function scrape() {
       const rawPath = path.join(RAW_DIR, `${scraper.name}_${Date.now()}.json`);
       fs.writeFileSync(rawPath, JSON.stringify(result, null, 2));
 
+      // 清洗数据
       const cleaned = cleaner.cleanQuests(result.quests);
-      allQuests.push(...cleaned);
+
+      // 拆分为更细粒度的任务
+      const splitQuests: any[] = [];
+      for (const quest of cleaned) {
+        const split = splitter.splitIntoQuests(quest);
+        splitQuests.push(...split);
+      }
+      console.log(`  Split into ${splitQuests.length} quests`);
+
+      allQuests.push(...splitQuests);
     } catch (error) {
       console.error(`  Failed: ${error}`);
     }
@@ -54,13 +66,23 @@ async function scrape() {
   }
 
   const validQuests = validator.filterValidQuests(allQuests);
-  console.log(`\nFiltered to ${validQuests.length} valid quests`);
+  console.log(`\nFinal: ${validQuests.length} valid quests`);
+
+  // 显示任务分布
+  const chapters = new Map<string, number>();
+  for (const q of validQuests) {
+    chapters.set(q.chapter_name, (chapters.get(q.chapter_name) || 0) + 1);
+  }
+  console.log('\nBy chapter:');
+  for (const [chapter, count] of chapters) {
+    console.log(`  ${chapter}: ${count} quests`);
+  }
 
   return validQuests;
 }
 
 async function exportToDb(quests?: any[]) {
-  console.log('Exporting to SQLite...');
+  console.log('\nExporting to SQLite...');
 
   if (!quests) {
     quests = loadRawData();
@@ -96,8 +118,17 @@ function loadRawData(): any[] {
 
   const cleaner = new DataCleaner();
   const validator = new DataValidator();
+  const splitter = new TaskSplitter();
 
-  return validator.filterValidQuests(cleaner.cleanQuests(quests));
+  // 清洗、拆分、验证
+  const cleaned = cleaner.cleanQuests(quests);
+  const splitQuests: any[] = [];
+  for (const quest of cleaned) {
+    const split = splitter.splitIntoQuests(quest);
+    splitQuests.push(...split);
+  }
+
+  return validator.filterValidQuests(splitQuests);
 }
 
 async function main() {
