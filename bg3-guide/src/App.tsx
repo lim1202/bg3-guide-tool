@@ -11,6 +11,18 @@ function App() {
   const [filter, setFilter] = useState<QuestType | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Helper to convert image URL to loadable URL
+  const getImageUrl = (imagePath: string | null): string | null => {
+    if (!imagePath) return null;
+    // If it's a local path (images/...), load from public directory
+    // Vite publicDir is set to src-tauri/data, so images/xxx.jpg maps to /images/xxx.jpg
+    if (imagePath.startsWith('images/')) {
+      return `/${imagePath}`;
+    }
+    // If it's a remote URL, return as-is
+    return imagePath;
+  };
+
   // Load quests from backend
   useEffect(() => {
     async function loadQuests() {
@@ -184,6 +196,20 @@ function App() {
                         </div>
                         <div className="flex-1">
                           <p className="text-gray-200">{step.description}</p>
+                          {step.image && (
+                            <div className="mt-3">
+                              <img
+                                src={getImageUrl(step.image) || ''}
+                                alt="步骤图片"
+                                className="max-w-full rounded-lg border border-gray-600"
+                                loading="lazy"
+                                onError={(e) => {
+                                  // Hide broken image
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          )}
                           {step.location && (
                             <div className="mt-2 text-sm text-gray-400 flex items-center gap-1">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -67,6 +67,7 @@ export class SQLiteExporter {
         description TEXT NOT NULL,
         location TEXT,
         rewards TEXT,
+        image TEXT,
         FOREIGN KEY (quest_id) REFERENCES quests(id)
       )
     `);
@@ -108,10 +109,10 @@ export class SQLiteExporter {
     return result[0].values[0][0] as number;
   }
 
-  insertQuestStep(questId: number, order: number, description: string, location: string | null, rewards: string[]): number {
+  insertQuestStep(questId: number, order: number, description: string, location: string | null, rewards: string[], image?: string): number {
     this.db!.run(
-      'INSERT INTO quest_steps (quest_id, `order`, description, location, rewards) VALUES (?, ?, ?, ?, ?)',
-      [questId, order, description, location || null, JSON.stringify(rewards)]
+      'INSERT INTO quest_steps (quest_id, `order`, description, location, rewards, image) VALUES (?, ?, ?, ?, ?, ?)',
+      [questId, order, description, location || null, JSON.stringify(rewards), image || null]
     );
     const result = this.db!.exec('SELECT last_insert_rowid() as id');
     return result[0].values[0][0] as number;
@@ -170,7 +171,7 @@ export class SQLiteExporter {
 
       for (let i = 0; i < quest.steps.length; i++) {
         const step = quest.steps[i];
-        const stepId = this.insertQuestStep(questId, i + 1, step.description, step.location || null, step.rewards || []);
+        const stepId = this.insertQuestStep(questId, i + 1, step.description, step.location || null, step.rewards || [], step.image);
 
         if (step.choices) {
           for (const choice of step.choices) {

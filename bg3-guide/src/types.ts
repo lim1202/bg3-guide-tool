@@ -25,6 +25,7 @@ export interface QuestStep {
   description: string;
   location: string | null;
   rewards: string; // JSON string from backend
+  image: string | null; // 图片URL
 }
 
 export interface Choice {

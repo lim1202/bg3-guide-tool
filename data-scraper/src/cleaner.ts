@@ -44,7 +44,8 @@ export class DataCleaner {
       description: this.cleanText(step.description),
       location: step.location ? this.cleanText(step.location) : undefined,
       rewards: step.rewards?.map(r => this.cleanText(r)).filter(r => r.length > 0),
-      choices: step.choices?.map(c => this.cleanChoice(c))
+      choices: step.choices?.map(c => this.cleanChoice(c)),
+      image: step.image // 保留图片URL
     };
   }
 

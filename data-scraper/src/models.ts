@@ -51,6 +51,7 @@ export interface ScrapedStep {
   location?: string;
   rewards?: string[];
   choices?: ScrapedChoice[];
+  image?: string; // 图片URL
 }
 
 export interface ScrapedChoice {

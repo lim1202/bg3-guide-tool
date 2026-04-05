@@ -30,6 +30,7 @@ pub struct QuestStep {
     pub description: String,
     pub location: Option<String>,
     pub rewards: String,
+    pub image: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -118,7 +119,7 @@ fn get_quest_steps(quest_id: i32, db: State<DbState>) -> Result<Vec<QuestStep>, 
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, quest_id, `order`, description, location, rewards
+            "SELECT id, quest_id, `order`, description, location, rewards, image
              FROM quest_steps
              WHERE quest_id = ?
              ORDER BY `order`"
@@ -134,6 +135,7 @@ fn get_quest_steps(quest_id: i32, db: State<DbState>) -> Result<Vec<QuestStep>, 
                 description: row.get(3)?,
                 location: row.get(4)?,
                 rewards: row.get(5)?,
+                image: row.get(6)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -178,7 +180,7 @@ fn get_quests_with_steps(db: State<DbState>) -> Result<Vec<QuestWithSteps>, Stri
     for (id, chapter_id, name, q_type, description, prerequisites, chapter_name) in quests {
         let mut step_stmt = conn
             .prepare(
-                "SELECT id, quest_id, `order`, description, location, rewards
+                "SELECT id, quest_id, `order`, description, location, rewards, image
                  FROM quest_steps
                  WHERE quest_id = ?
                  ORDER BY `order`"
@@ -194,6 +196,7 @@ fn get_quests_with_steps(db: State<DbState>) -> Result<Vec<QuestWithSteps>, Stri
                     description: row.get(3)?,
                     location: row.get(4)?,
                     rewards: row.get(5)?,
+                    image: row.get(6)?,
                 })
             })
             .map_err(|e| e.to_string())?

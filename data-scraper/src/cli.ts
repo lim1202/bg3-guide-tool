@@ -66,11 +66,14 @@ async function scrape() {
   }
 
   const validQuests = validator.filterValidQuests(allQuests);
-  console.log(`\nFinal: ${validQuests.length} valid quests`);
+
+  // 按章节排序
+  const sortedQuests = splitter.sortQuestsByChapter(validQuests);
+  console.log(`\nFinal: ${sortedQuests.length} valid quests (sorted by chapter)`);
 
   // 显示任务分布
   const chapters = new Map<string, number>();
-  for (const q of validQuests) {
+  for (const q of sortedQuests) {
     chapters.set(q.chapter_name, (chapters.get(q.chapter_name) || 0) + 1);
   }
   console.log('\nBy chapter:');
@@ -78,7 +81,7 @@ async function scrape() {
     console.log(`  ${chapter}: ${count} quests`);
   }
 
-  return validQuests;
+  return sortedQuests;
 }
 
 async function exportToDb(quests?: any[]) {
