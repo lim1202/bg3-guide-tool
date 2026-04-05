@@ -24,11 +24,22 @@ export async function recognizeText(
   onProgress?: (progress: number) => void
 ): Promise<OcrResult> {
   try {
-    // Create worker with proper configuration for production
+    // Create worker - let Tesseract.js use default CDN paths
     const worker = await createWorker('chi_sim+eng', 1, {
       logger: (m) => {
-        if (m.status === 'recognizing text' && onProgress) {
-          onProgress(Math.round(m.progress * 100));
+        // Report progress for various stages
+        if (onProgress) {
+          if (m.status === 'loading tesseract core') {
+            onProgress(Math.round(5 + m.progress * 10)); // 5-15%
+          } else if (m.status === 'initializing tesseract') {
+            onProgress(Math.round(15 + m.progress * 15)); // 15-30%
+          } else if (m.status === 'loading language traineddata') {
+            onProgress(Math.round(30 + m.progress * 30)); // 30-60%
+          } else if (m.status === 'initializing api') {
+            onProgress(Math.round(60 + m.progress * 10)); // 60-70%
+          } else if (m.status === 'recognizing text') {
+            onProgress(Math.round(70 + m.progress * 30)); // 70-100%
+          }
         }
       }
     });
@@ -36,12 +47,25 @@ export async function recognizeText(
     const result = await worker.recognize(image);
     await worker.terminate();
 
+    onProgress?.(100);
+
     return {
       text: result.data.text.trim(),
       confidence: result.data.confidence,
     };
   } catch (error) {
-    throw new Error(`OCR识别失败: ${error instanceof Error ? error.message : String(error)}`);
+    // Extract error message from various possible formats
+    let errorMessage: string;
+    if (error instanceof Error) {
+      errorMessage = error.message || error.name || 'Unknown error';
+    } else if (typeof error === 'object' && error !== null) {
+      const errorObj = error as Record<string, unknown>;
+      errorMessage = String(errorObj.message || errorObj.error || errorObj.details || JSON.stringify(errorObj));
+    } else {
+      errorMessage = String(error);
+    }
+
+    throw new Error(`OCR识别失败: ${errorMessage}`);
   }
 }
 

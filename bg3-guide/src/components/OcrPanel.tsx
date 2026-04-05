@@ -302,7 +302,19 @@ export default function OcrPanel({ quests, onSelectQuest, onClose }: OcrPanelPro
         }
       }
     } catch (e) {
-      setError(`OCR识别失败: ${String(e)}`);
+      // Extract meaningful error message
+      let errorMsg: string;
+      if (e instanceof Error) {
+        // Remove the "Error: " prefix if it exists to avoid duplication
+        errorMsg = e.message.replace(/^Error:\s*/, '');
+      } else if (typeof e === 'object' && e !== null) {
+        const errorObj = e as Record<string, unknown>;
+        errorMsg = String(errorObj.message || errorObj.error || JSON.stringify(errorObj));
+      } else {
+        errorMsg = String(e);
+      }
+      setError(`OCR识别失败: ${errorMsg}`);
+      console.error('[OCR Panel] Error:', e);
     } finally {
       setIsProcessing(false);
     }
