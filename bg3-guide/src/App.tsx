@@ -21,12 +21,30 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showOcrPanel, setShowOcrPanel] = useState(false);
 
+  // Handle quest selection with scroll reset
+  const handleSelectQuest = useCallback((quest: QuestWithSteps) => {
+    setSelectedQuest(quest);
+    // Reset detail scroll to top when switching quests
+    if (questDetailRef.current) {
+      questDetailRef.current.scrollTop = 0;
+    }
+    questDetailVisibleStepOrder.current = 1;
+  }, []);
+
   // Window control states
   const [isCompact, setIsCompact] = useState(false);
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(true);
 
-  // Ref for quest list scrolling
+  // Track checked steps (keyed by step.id)
+  const [checkedSteps, setCheckedSteps] = useState<Set<number>>(new Set());
+
+  // Refs for scrollable areas
   const questListRef = useRef<HTMLDivElement>(null);
+  const questDetailRef = useRef<HTMLDivElement>(null);
+
+  // Refs to store scroll positions (persist across minimize/restore)
+  const questListScrollTop = useRef<number>(0);
+  const questDetailVisibleStepOrder = useRef<number>(1);
 
   // Helper to convert image URL to loadable URL
   const getImageUrl = (imagePath: string | null): string | null => {
@@ -68,6 +86,43 @@ function App() {
       }
     }
     initWindow();
+  }, []);
+
+  // Restore scroll positions on window resize (e.g., after minimize/restore)
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    async function setupResizeListener() {
+      try {
+        const appWindow = getCurrentWindow();
+        unlisten = await appWindow.onResized(() => {
+          // Restore quest list scroll
+          requestAnimationFrame(() => {
+            if (questListRef.current && questListScrollTop.current > 0) {
+              questListRef.current.scrollTop = questListScrollTop.current;
+            }
+          });
+          // Restore quest detail scroll by scrolling to saved step order
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (questDetailVisibleStepOrder.current !== null) {
+                const stepElement = document.getElementById(`step-card-${questDetailVisibleStepOrder.current}`);
+                if (stepElement) {
+                  stepElement.scrollIntoView({ block: 'start' });
+                }
+              }
+            });
+          });
+        });
+      } catch (e) {
+        console.error("Failed to setup resize listener:", e);
+      }
+    }
+    setupResizeListener();
+
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, []);
 
   // Toggle compact mode
@@ -275,7 +330,13 @@ function App() {
         </div>
 
         {/* Quest List */}
-        <div ref={questListRef} className="flex-1 overflow-y-auto">
+        <div
+          ref={questListRef}
+          className="flex-1 overflow-y-auto"
+          onScroll={(e) => {
+            questListScrollTop.current = (e.target as HTMLDivElement).scrollTop;
+          }}
+        >
           {chapters.map((chapter) => (
             <div key={chapter}>
               <div className="px-4 py-2 bg-gray-750 text-sm font-semibold text-gray-400 border-b border-gray-700">
@@ -290,7 +351,7 @@ function App() {
                     className={`px-4 py-3 cursor-pointer border-b border-gray-700 hover:bg-gray-700 ${
                       selectedQuest?.id === quest.id ? "bg-gray-700 border-l-2 border-l-amber-500" : ""
                     }`}
-                    onClick={() => setSelectedQuest(quest)}
+                    onClick={() => handleSelectQuest(quest)}
                   >
                     <div className="flex items-center gap-2">
                       <span
@@ -358,7 +419,30 @@ function App() {
             </div>
 
             {/* Steps List */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div
+              ref={questDetailRef}
+              className="flex-1 overflow-y-auto p-6"
+              onScroll={() => {
+                // Track the step closest to the viewport top
+                if (questDetailRef.current && selectedQuest) {
+                  const containerTop = questDetailRef.current.getBoundingClientRect().top;
+                  let closestOrder = 1;
+                  let minDistance = Infinity;
+                  for (const step of selectedQuest.steps) {
+                    const stepElement = document.getElementById(`step-card-${step.order}`);
+                    if (stepElement) {
+                      const stepTop = stepElement.getBoundingClientRect().top;
+                      const distance = Math.abs(stepTop - containerTop);
+                      if (distance < minDistance) {
+                        minDistance = distance;
+                        closestOrder = step.order;
+                      }
+                    }
+                  }
+                  questDetailVisibleStepOrder.current = closestOrder;
+                }
+              }}
+            >
               <h3 className="text-lg font-semibold mb-4 text-gray-300">任务步骤</h3>
               <div className="space-y-4">
                 {selectedQuest.steps.map((step) => {
@@ -366,6 +450,7 @@ function App() {
                   return (
                     <div
                       key={step.id}
+                      id={`step-card-${step.order}`}
                       className="bg-gray-800 rounded-lg p-4 border border-gray-700"
                     >
                       <div className="flex items-start gap-3">
@@ -407,7 +492,20 @@ function App() {
                             </div>
                           )}
                         </div>
-                        <input type="checkbox" className="w-5 h-5 rounded bg-gray-700 border-gray-600" />
+                        <input
+                          type="checkbox"
+                          className="w-5 h-5 rounded bg-gray-700 border-gray-600"
+                          checked={checkedSteps.has(step.id)}
+                          onChange={(e) => {
+                            const newChecked = new Set(checkedSteps);
+                            if (e.target.checked) {
+                              newChecked.add(step.id);
+                            } else {
+                              newChecked.delete(step.id);
+                            }
+                            setCheckedSteps(newChecked);
+                          }}
+                        />
                       </div>
                     </div>
                   );
@@ -433,7 +531,7 @@ function App() {
       {showOcrPanel && (
         <OcrPanel
           quests={quests}
-          onSelectQuest={(quest) => setSelectedQuest(quest)}
+          onSelectQuest={(quest) => handleSelectQuest(quest)}
           onClose={() => setShowOcrPanel(false)}
         />
       )}
