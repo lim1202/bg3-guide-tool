@@ -13,7 +13,8 @@ export class GamerskyScraper extends BaseScraper {
   }
 
   private guideUrls = [
-    'https://www.gamersky.com/handbook/202308/1389.shtml',
+    'https://www.gamersky.com/handbook/202308/1628448.shtml', // 全流程图文攻略
+    'https://www.gamersky.com/handbook/202308/1635334.shtml', // 全支线及伙伴任务攻略
   ];
 
   async scrape(): Promise<ScraperResult> {
@@ -22,9 +23,11 @@ export class GamerskyScraper extends BaseScraper {
 
     for (const url of this.guideUrls) {
       try {
-        const $ = await this.fetchPage(url);
-        const pageQuests = this.parseGuidePage($);
-        quests.push(...pageQuests);
+        const pages = await this.fetchAllPages(url);
+        const quest = this.parsePagesToQuest(pages, url);
+        if (quest) {
+          quests.push(quest);
+        }
       } catch (error) {
         errors.push(`Failed to scrape ${url}: ${error}`);
       }
@@ -38,54 +41,73 @@ export class GamerskyScraper extends BaseScraper {
     };
   }
 
-  private parseGuidePage($: cheerio.CheerioAPI): ScrapedQuest[] {
-    const quests: ScrapedQuest[] = [];
+  private async fetchAllPages(startUrl: string): Promise<cheerio.CheerioAPI[]> {
+    const pages: cheerio.CheerioAPI[] = [];
+    const $ = await this.fetchPage(startUrl);
+    pages.push($);
 
-    $('.glMain').each((_, element) => {
-      const title = this.cleanText($(element).find('h2').text());
-      const paragraphs = $(element).find('p');
+    // 获取分页链接
+    const pageLinks = $('.page_css a')
+      .map((_, el) => $(el).attr('href'))
+      .get()
+      .filter((href): href is string => !!href && href !== startUrl);
 
-      if (title) {
-        const steps = this.parseStepsFromParagraphs($, paragraphs);
-        const type = this.detectQuestType(title);
-
-        quests.push({
-          name: title,
-          type,
-          description: '',
-          chapter_name: this.detectChapter(title),
-          steps
-        });
+    // 去重并获取所有页面
+    const uniqueLinks = [...new Set(pageLinks)];
+    for (const link of uniqueLinks.slice(0, 10)) { // 限制前10页
+      try {
+        const page$ = await this.fetchPage(link);
+        pages.push(page$);
+      } catch {
+        // 跳过失败的页面
       }
-    });
+    }
 
-    return quests;
+    return pages;
   }
 
-  private parseStepsFromParagraphs($: cheerio.CheerioAPI, paragraphs: cheerio.Cheerio<any>): ScrapedStep[] {
+  private parsePagesToQuest(pages: cheerio.CheerioAPI[], url: string): ScrapedQuest | null {
     const steps: ScrapedStep[] = [];
+    let questTitle = '博德之门3流程攻略';
 
-    paragraphs.each((index: number, _: any) => {
-      const text = this.cleanText($(paragraphs[index]).text());
-      if (text.length > 10) {
-        steps.push({ description: text });
+    for (const $ of pages) {
+      // 获取页面标题
+      const title = $('title').text();
+      if (title && title.includes('攻略')) {
+        questTitle = title.split('_')[0].replace('《博德之门3》', '').trim();
       }
-    });
 
-    return steps;
+      // 解析段落内容
+      $('.Mid2L_con p').each((_, el) => {
+        const text = this.cleanText($(el).text());
+        if (text.length > 30) {
+          steps.push({ description: text });
+        }
+      });
+    }
+
+    if (steps.length === 0) {
+      return null;
+    }
+
+    // 根据 URL 判断任务类型
+    let type = QuestType.Main;
+    if (url.includes('1635334')) {
+      type = QuestType.Side; // 支线及伙伴任务
+    }
+
+    return {
+      name: questTitle,
+      type,
+      description: `来自游民星空的攻略，共 ${pages.length} 页`,
+      chapter_name: '综合',
+      steps
+    };
   }
 
   private detectQuestType(title: string): QuestType {
     if (title.includes('支线')) return QuestType.Side;
     if (title.includes('同伴') || title.includes('伙伴')) return QuestType.Companion;
     return QuestType.Main;
-  }
-
-  private detectChapter(title: string): string {
-    if (title.includes('鹦鹉螺') || title.includes('海滩')) return '第一章';
-    if (title.includes('德鲁伊') || title.includes('林地')) return '第一章';
-    if (title.includes('月出') || title.includes('塔')) return '第二章';
-    if (title.includes('博德') || title.includes('之门')) return '第三章';
-    return '第一章';
   }
 }

@@ -12,9 +12,9 @@ export class ThreeDMScraper extends BaseScraper {
     return 'https://www.3dmgame.com';
   }
 
-  // BG3攻略专题页面URL（需要根据实际网站结构调整）
+  // BG3攻略专题页面URL
   private guideUrls = [
-    'https://www.3dmgame.com/gl/3827_1.html', // 主线攻略示例URL
+    'https://www.3dmgame.com/games/bg3/',
   ];
 
   async scrape(): Promise<ScraperResult> {
