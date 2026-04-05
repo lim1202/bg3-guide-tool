@@ -1,6 +1,7 @@
 // __tests__/scrapers.test.ts
 import { BaseScraper, ScraperResult } from '../src/scrapers/base';
 import { ThreeDMScraper } from '../src/scrapers/3dm';
+import { GamerskyScraper } from '../src/scrapers/gamersky';
 
 describe('BaseScraper', () => {
   class TestScraper extends BaseScraper {
@@ -49,6 +50,19 @@ describe('ThreeDMScraper', () => {
   // 注意：实际网络请求测试需要mock，这里只验证结构
   it('should implement scrape method', () => {
     const scraper = new ThreeDMScraper();
+    expect(scraper.scrape).toBeDefined();
+  });
+});
+
+describe('GamerskyScraper', () => {
+  it('should have correct name and url', () => {
+    const scraper = new GamerskyScraper();
+    expect(scraper.name).toBe('gamersky');
+    expect(scraper.baseUrl).toContain('gamersky');
+  });
+
+  it('should implement scrape method', () => {
+    const scraper = new GamerskyScraper();
     expect(scraper.scrape).toBeDefined();
   });
 });
