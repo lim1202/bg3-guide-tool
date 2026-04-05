@@ -1,5 +1,6 @@
 // __tests__/scrapers.test.ts
 import { BaseScraper, ScraperResult } from '../src/scrapers/base';
+import { ThreeDMScraper } from '../src/scrapers/3dm';
 
 describe('BaseScraper', () => {
   class TestScraper extends BaseScraper {
@@ -35,5 +36,19 @@ describe('BaseScraper', () => {
   it('should have fetchPage method', () => {
     const scraper = new TestScraper();
     expect((scraper as any).fetchPage).toBeDefined();
+  });
+});
+
+describe('ThreeDMScraper', () => {
+  it('should have correct name and url', () => {
+    const scraper = new ThreeDMScraper();
+    expect(scraper.name).toBe('3dm');
+    expect(scraper.baseUrl).toContain('3dmgame');
+  });
+
+  // 注意：实际网络请求测试需要mock，这里只验证结构
+  it('should implement scrape method', () => {
+    const scraper = new ThreeDMScraper();
+    expect(scraper.scrape).toBeDefined();
   });
 });
