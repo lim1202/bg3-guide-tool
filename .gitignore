@@ -37,6 +37,7 @@ npm-debug.log*
 data-scraper/data/raw/*.json
 data-scraper/data/*.db
 data-scraper/data/*.db-journal
+data-scraper/data/images/
 
 # Downloaded images (too large for git)
 bg3-guide/src-tauri/data/images/
