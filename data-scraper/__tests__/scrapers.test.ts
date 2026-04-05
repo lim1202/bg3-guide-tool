@@ -2,6 +2,7 @@
 import { BaseScraper, ScraperResult } from '../src/scrapers/base';
 import { ThreeDMScraper } from '../src/scrapers/3dm';
 import { GamerskyScraper } from '../src/scrapers/gamersky';
+import { scrapers, getScraper, getAllScrapers } from '../src/scrapers/index';
 
 describe('BaseScraper', () => {
   class TestScraper extends BaseScraper {
@@ -64,5 +65,28 @@ describe('GamerskyScraper', () => {
   it('should implement scrape method', () => {
     const scraper = new GamerskyScraper();
     expect(scraper.scrape).toBeDefined();
+  });
+});
+
+describe('scrapers index', () => {
+  it('should register all scrapers', () => {
+    expect(scrapers.size).toBe(2);
+    expect(scrapers.has('3dm')).toBe(true);
+    expect(scrapers.has('gamersky')).toBe(true);
+  });
+
+  it('should get scraper by name', () => {
+    const scraper = getScraper('3dm');
+    expect(scraper?.name).toBe('3dm');
+  });
+
+  it('should return undefined for unknown scraper', () => {
+    const scraper = getScraper('unknown');
+    expect(scraper).toBeUndefined();
+  });
+
+  it('should get all scrapers', () => {
+    const all = getAllScrapers();
+    expect(all.length).toBe(2);
   });
 });
