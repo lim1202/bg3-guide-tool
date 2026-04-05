@@ -1,4 +1,4 @@
-// Types matching the database schema
+// Types matching the Rust backend
 
 export type QuestType = 'main' | 'side' | 'companion';
 
@@ -12,9 +12,10 @@ export interface Quest {
   id: number;
   chapter_id: number;
   name: string;
-  type: QuestType;
+  q_type: string;
   description: string;
-  prerequisites: number[];
+  prerequisites: string;
+  chapter_name: string | null;
 }
 
 export interface QuestStep {
@@ -23,7 +24,7 @@ export interface QuestStep {
   order: number;
   description: string;
   location: string | null;
-  rewards: string[];
+  rewards: string; // JSON string from backend
 }
 
 export interface Choice {
@@ -35,7 +36,33 @@ export interface Choice {
 }
 
 // Combined quest with steps for display
-export interface QuestWithSteps extends Quest {
-  steps: QuestStep[];
+export interface QuestWithSteps {
+  id: number;
+  chapter_id: number;
+  name: string;
+  q_type: string;
+  description: string;
+  prerequisites: number[];
   chapter_name: string;
+  steps: QuestStep[];
+}
+
+// Helper to parse rewards JSON
+export function parseRewards(rewardsJson: string): string[] {
+  try {
+    const parsed = JSON.parse(rewardsJson);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// Helper to get quest type display name
+export function getQuestTypeDisplay(type: string): string {
+  switch (type) {
+    case 'main': return '主线';
+    case 'side': return '支线';
+    case 'companion': return '同伴';
+    default: return type;
+  }
 }
