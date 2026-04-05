@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{Manager, State};
 use rusqlite::Connection;
+use xcap::Monitor;
+use image::ImageEncoder;
 
 // Data structures matching the database schema
 #[derive(Debug, Serialize, Deserialize)]
@@ -220,6 +222,91 @@ fn get_quests_with_steps(db: State<DbState>) -> Result<Vec<QuestWithSteps>, Stri
     Ok(result)
 }
 
+// Screenshot result structure
+#[derive(Debug, Serialize)]
+pub struct ScreenshotResult {
+    pub image_base64: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Capture the primary monitor screen
+#[tauri::command]
+fn capture_screen() -> Result<ScreenshotResult, String> {
+    // Get primary monitor
+    let monitor = Monitor::all()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .next()
+        .ok_or_else(|| "No monitor found".to_string())?;
+
+    // Capture screenshot
+    let screenshot = monitor.capture_image().map_err(|e| e.to_string())?;
+
+    // Convert to PNG bytes using image crate
+    let mut png_bytes: Vec<u8> = Vec::new();
+    let encoder = image::codecs::png::PngEncoder::new(&mut png_bytes);
+    encoder
+        .write_image(
+            screenshot.as_raw(),
+            screenshot.width(),
+            screenshot.height(),
+            image::ColorType::Rgba8,
+        )
+        .map_err(|e: image::ImageError| e.to_string())?;
+
+    // Encode as base64
+    let base64_str = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &png_bytes);
+
+    Ok(ScreenshotResult {
+        image_base64: base64_str,
+        width: screenshot.width(),
+        height: screenshot.height(),
+    })
+}
+
+/// Capture a specific window by name (e.g., "Baldur's Gate 3")
+#[tauri::command]
+fn capture_window(window_name: String) -> Result<ScreenshotResult, String> {
+    use xcap::Window;
+
+    // Find window by name
+    let windows = Window::all().map_err(|e| e.to_string())?;
+
+    let target_window = windows
+        .into_iter()
+        .find(|w| {
+            let title = w.title();
+            // Match partial window name (BG3 window title may vary)
+            title.contains(&window_name)
+        })
+        .ok_or_else(|| format!("Window '{}' not found", window_name))?;
+
+    // Capture the window
+    let screenshot = target_window.capture_image().map_err(|e| e.to_string())?;
+
+    // Convert to PNG bytes using image crate
+    let mut png_bytes: Vec<u8> = Vec::new();
+    let encoder = image::codecs::png::PngEncoder::new(&mut png_bytes);
+    encoder
+        .write_image(
+            screenshot.as_raw(),
+            screenshot.width(),
+            screenshot.height(),
+            image::ColorType::Rgba8,
+        )
+        .map_err(|e: image::ImageError| e.to_string())?;
+
+    // Encode as base64
+    let base64_str = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &png_bytes);
+
+    Ok(ScreenshotResult {
+        image_base64: base64_str,
+        width: screenshot.width(),
+        height: screenshot.height(),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -241,7 +328,9 @@ pub fn run() {
             get_chapters,
             get_quests,
             get_quest_steps,
-            get_quests_with_steps
+            get_quests_with_steps,
+            capture_screen,
+            capture_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

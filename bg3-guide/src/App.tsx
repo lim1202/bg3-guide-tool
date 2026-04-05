@@ -1,7 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import "./App.css";
 import { QuestWithSteps, QuestType, parseRewards, getQuestTypeDisplay } from "./types";
+import OcrPanel from "./components/OcrPanel";
+
+// Window size constants
+const NORMAL_WIDTH = 1200;
+const NORMAL_HEIGHT = 800;
+const COMPACT_WIDTH = 500;
+const COMPACT_HEIGHT = 56;
 
 function App() {
   const [quests, setQuests] = useState<QuestWithSteps[]>([]);
@@ -10,6 +18,12 @@ function App() {
   const [selectedQuest, setSelectedQuest] = useState<QuestWithSteps | null>(null);
   const [filter, setFilter] = useState<QuestType | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showOcrPanel, setShowOcrPanel] = useState(false);
+
+  // Window control states
+  const [isCompact, setIsCompact] = useState(false);
+  const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(true);
+  const [showQuickQuestList, setShowQuickQuestList] = useState(false);
 
   // Helper to convert image URL to loadable URL
   const getImageUrl = (imagePath: string | null): string | null => {
@@ -38,6 +52,50 @@ function App() {
     }
     loadQuests();
   }, []);
+
+  // Initialize window always-on-top
+  useEffect(() => {
+    async function initWindow() {
+      try {
+        const appWindow = getCurrentWindow();
+        await appWindow.setAlwaysOnTop(true);
+        setIsAlwaysOnTop(true);
+      } catch (e) {
+        console.error("Failed to set always on top:", e);
+      }
+    }
+    initWindow();
+  }, []);
+
+  // Toggle compact mode
+  const toggleCompact = useCallback(async () => {
+    try {
+      const appWindow = getCurrentWindow();
+      if (isCompact) {
+        // Restore normal mode
+        await appWindow.setSize(new LogicalSize(NORMAL_WIDTH, NORMAL_HEIGHT));
+        setIsCompact(false);
+        setShowQuickQuestList(false);
+      } else {
+        // Enter compact mode
+        await appWindow.setSize(new LogicalSize(COMPACT_WIDTH, COMPACT_HEIGHT));
+        setIsCompact(true);
+      }
+    } catch (e) {
+      console.error("Failed to toggle compact mode:", e);
+    }
+  }, [isCompact]);
+
+  // Toggle always-on-top
+  const toggleAlwaysOnTop = useCallback(async () => {
+    try {
+      const appWindow = getCurrentWindow();
+      await appWindow.setAlwaysOnTop(!isAlwaysOnTop);
+      setIsAlwaysOnTop(!isAlwaysOnTop);
+    } catch (e) {
+      console.error("Failed to toggle always on top:", e);
+    }
+  }, [isAlwaysOnTop]);
 
   const filteredQuests = quests.filter(quest => {
     const matchesType = filter === "all" || quest.q_type === filter;
@@ -68,11 +126,156 @@ function App() {
 
   return (
     <div className="flex h-screen bg-gray-900 text-gray-100">
+      {/* Compact Mode - Mini Floating Bar */}
+      {isCompact && (
+        <div className="w-full h-full flex items-center bg-gray-800 border-b border-gray-700 px-3">
+          {/* Quest Type Icon */}
+          {selectedQuest && (
+            <span
+              className={`text-xs px-2 py-0.5 rounded mr-2 ${
+                selectedQuest.q_type === "main"
+                  ? "bg-red-900 text-red-200"
+                  : selectedQuest.q_type === "side"
+                  ? "bg-blue-900 text-blue-200"
+                  : "bg-green-900 text-green-200"
+              }`}
+            >
+              {getQuestTypeDisplay(selectedQuest.q_type)}
+            </span>
+          )}
+          {/* Quest Name */}
+          <div
+            className="flex-1 flex items-center cursor-pointer hover:text-amber-400 transition-colors"
+            onClick={() => setShowQuickQuestList(!showQuickQuestList)}
+          >
+            <span className="text-lg font-medium truncate">
+              {selectedQuest ? selectedQuest.name : "点击选择任务"}
+            </span>
+            {selectedQuest && (
+              <span className="text-sm text-gray-400 ml-2 truncate">
+                · {selectedQuest.chapter_name}
+              </span>
+            )}
+          </div>
+          {/* Control Buttons */}
+          <div className="flex items-center gap-1 ml-2">
+            <button
+              onClick={toggleAlwaysOnTop}
+              className={`p-1.5 rounded transition-colors ${
+                isAlwaysOnTop ? "bg-amber-600 text-white" : "bg-gray-700 hover:bg-gray-600"
+              }`}
+              title={isAlwaysOnTop ? "取消置顶" : "窗口置顶"}
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M16 12V4H17V2H7V4H8V12L6 14V16H11.2V22H12.8V16H18V14L16 12Z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setShowQuickQuestList(!showQuickQuestList)}
+              className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+              title="任务列表"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <button
+              onClick={toggleCompact}
+              className="p-1.5 bg-amber-600 hover:bg-amber-500 rounded transition-colors"
+              title="展开窗口"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+              </svg>
+            </button>
+          </div>
+          {/* Quick Quest List Dropdown */}
+          {showQuickQuestList && (
+            <div className="absolute top-full left-0 right-0 bg-gray-800 border border-gray-700 shadow-lg max-h-60 overflow-y-auto z-50">
+              {chapters.map((chapter) => (
+                <div key={chapter}>
+                  <div className="px-3 py-1.5 bg-gray-750 text-xs font-semibold text-gray-400 border-b border-gray-700">
+                    {chapter}
+                  </div>
+                  {filteredQuests
+                    .filter((q) => q.chapter_name === chapter)
+                    .map((quest) => (
+                      <div
+                        key={quest.id}
+                        className={`px-3 py-2 cursor-pointer hover:bg-gray-700 border-b border-gray-700 ${
+                          selectedQuest?.id === quest.id ? "bg-amber-900/30" : ""
+                        }`}
+                        onClick={() => {
+                          setSelectedQuest(quest);
+                          setShowQuickQuestList(false);
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-xs px-1.5 py-0.5 rounded ${
+                              quest.q_type === "main"
+                                ? "bg-red-900 text-red-200"
+                                : quest.q_type === "side"
+                                ? "bg-blue-900 text-blue-200"
+                                : "bg-green-900 text-green-200"
+                            }`}
+                          >
+                            {getQuestTypeDisplay(quest.q_type)}
+                          </span>
+                          <span className="text-sm font-medium truncate">{quest.name}</span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Normal Mode - Full UI */}
+      {!isCompact && (
+        <>
       {/* Left Sidebar - Quest List */}
       <div className="w-80 bg-gray-800 flex flex-col border-r border-gray-700">
         {/* Header */}
         <div className="p-4 border-b border-gray-700">
-          <h1 className="text-xl font-bold text-amber-400">博德之门3 攻略</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-amber-400">博德之门3 攻略</h1>
+            <div className="flex items-center gap-2">
+              {/* Window Control Buttons */}
+              <button
+                onClick={toggleAlwaysOnTop}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isAlwaysOnTop ? "bg-amber-600 text-white" : "bg-gray-700 hover:bg-gray-600"
+                }`}
+                title={isAlwaysOnTop ? "取消置顶" : "窗口置顶"}
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M16 12V4H17V2H7V4H8V12L6 14V16H11.2V22H12.8V16H18V14L16 12Z" />
+                </svg>
+              </button>
+              <button
+                onClick={toggleCompact}
+                className="p-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                title="迷你模式"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setShowOcrPanel(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-lg text-sm font-medium transition-colors"
+                title="截图识别任务"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                截图识别
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Search */}
@@ -248,6 +451,17 @@ function App() {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {/* OCR Panel Modal */}
+      {showOcrPanel && (
+        <OcrPanel
+          quests={quests}
+          onSelectQuest={(quest) => setSelectedQuest(quest)}
+          onClose={() => setShowOcrPanel(false)}
+        />
+      )}
     </div>
   );
 }

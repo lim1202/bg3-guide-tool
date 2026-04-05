@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "BG3攻略工具",
+  "productName": "BG3Guide",
   "version": "0.1.0",
   "identifier": "com.bg3guide.app",
   "build": {
@@ -15,8 +15,8 @@
         "title": "博德之门3 攻略工具",
         "width": 1200,
         "height": 800,
-        "minWidth": 900,
-        "minHeight": 600,
+        "minWidth": 400,
+        "minHeight": 56,
         "resizable": true,
         "center": true
       }
@@ -37,6 +37,11 @@
     ],
     "resources": [
       "data/*"
-    ]
+    ],
+    "windows": {
+      "wix": {
+        "language": "zh-CN"
+      }
+    }
   }
 }

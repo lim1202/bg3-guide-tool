@@ -23,4 +23,7 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
+xcap = "0.0"  # Cross-platform screenshot library
+base64 = "0.22"  # For encoding screenshots as base64
+image = "0.24"  # For PNG encoding
 
