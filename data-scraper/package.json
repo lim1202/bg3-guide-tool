@@ -11,7 +11,7 @@
     "clean": "ts-node src/cli.ts clean"
   },
   "dependencies": {
-    "axios": "^1.6.0",
+    "axios": "^1.15.0",
     "cheerio": "^1.0.0",
     "sql.js": "^1.10.3"
   },
